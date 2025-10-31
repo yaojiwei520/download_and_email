@@ -1,63 +1,49 @@
-name: '手动下载文件并作为附件发送'
+name: '手动发送邮件 (带附件)'
 
 on:
   workflow_dispatch:
     inputs:
-      download_url:
-        description: '⬇️ 文件下载 URL'
+      email_subject:
+        description: '📝 邮件主题'
         required: true
-        default: 'https://example.com/file_to_download'
+        default: '附件邮件通知'
+      email_body:
+        description: '💬 邮件内容'
+        required: true
+        default: '请查收附件。'
       recipient_email:
-        description: '📧 接收文件的邮箱地址'
+        description: '📧 收件人邮箱地址'
         required: true
         default: '275559292@qq.com' 
+      attachment_path: # 新增附件路径输入
+        description: '📎 附件文件路径 (Runner工作区内的文件)'
+        required: false # 附件不是必须的
+        default: './README.md' # 默认使用仓库中必有的文件作为示例
 
 jobs:
-  download_and_send_email:
-    name: '下载并发送任务'
+  send_message:
+    name: '发送邮件任务'
     runs-on: ubuntu-latest
 
-    # 定义环境变量来存储自动生成的文件名
-    env:
-      AUTO_FILE_NAME: downloaded_artifact_${{ github.run_id }} # 不加后缀，确保兼容性
+    # 步骤 0: 检出代码，确保能访问到附件文件
+    - name: 0. 检出仓库代码
+      uses: actions/checkout@v4
 
-    steps:
-      # 步骤 1: 下载文件 (使用自动生成的文件名)
-      - name: 1. 下载文件
-        run: |
-          echo "准备从 ${{ github.event.inputs.download_url }} 下载..."
-          # 下载文件到工作区，不加后缀名
-          curl -L -o "${{ env.AUTO_FILE_NAME }}" "${{ github.event.inputs.download_url }}"
-          
-          echo "文件下载完成!"
-          echo "自动文件名: ${{ env.AUTO_FILE_NAME }}"
+    # 步骤 1: 发送邮件 (带附件)
+    - name: 1. 发送邮件
+      uses: dawidd6/action-send-mail@v3
+      with:
+        # SMTP 服务器配置
+        server_address: ${{ secrets.SMTP_HOST }}
+        server_port: ${{ secrets.SMTP_PORT }}
+        username: ${{ secrets.SMTP_USERNAME }}
+        password: ${{ secrets.SMTP_PASSWORD }} 
 
-      # 步骤 2: 发送邮件（带附件）
-      - name: 2. 发送邮件
-        uses: dawidd6/action-send-mail@v3
-        with:
-          # SMTP 服务器配置
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }} 
-
-          # 邮件内容配置
-          subject: '✅ 文件附件已发送: ${{ env.AUTO_FILE_NAME }}'
-          to: ${{ github.event.inputs.recipient_email }}
-          from: GitHub Actions <${{ secrets.SMTP_USERNAME }}> 
-          
-          body: |
-            您请求的文件已通过附件发送。
-            附件名: ${{ env.AUTO_FILE_NAME }}
-            
-          # 附件功能（指向下载的文件）
-          attachments: ./${{ env.AUTO_FILE_NAME }}
-          
-      # 步骤 3: 清理下载的文件
-      - name: 3. 清理工作区文件
-        if: always() 
-        run: |
-          echo "清理下载的文件..."
-          rm -f "${{ env.AUTO_FILE_NAME }}"
-          echo "清理完成。"
+        # 邮件内容配置
+        subject: ${{ github.event.inputs.email_subject }}
+        to: ${{ github.event.inputs.recipient_email }}
+        from: GitHub Actions <${{ secrets.SMTP_USERNAME }}> 
+        body: ${{ github.event.inputs.email_body }}
+        
+        # 添加附件功能
+        attachments: ${{ github.event.inputs.attachment_path }}
