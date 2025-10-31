@@ -1,4 +1,4 @@
-name: '手动下载并发送邮件 (可自定义邮箱)'
+name: '手动下载并发送邮件 (自动文件名)'
 
 on:
   workflow_dispatch:
@@ -6,11 +6,7 @@ on:
       download_url:
         description: '⬇️ 文件下载 URL'
         required: true
-        default: 'https://example.com/file.dat' # 默认示例
-      file_name:
-        description: '📄 保存的文件名 (请务必包含原始文件的后缀, 如: image.jpg, document.pdf)'
-        required: true
-        default: 'downloaded_file.bin' # 默认示例
+        default: 'https://example.com/file_to_download'
       recipient_email:
         description: '📧 接收文件的邮箱地址'
         required: true
@@ -21,20 +17,24 @@ jobs:
     name: '下载并发送任务'
     runs-on: ubuntu-latest
 
+    # 定义环境变量来存储自动生成的文件名
+    env:
+      AUTO_FILE_NAME: downloaded_artifact_${{ github.run_id }}.bin
+
     steps:
-      # 步骤 1: 下载文件 (保持原始格式)
+      # 步骤 1: 下载文件 (使用自动生成的文件名)
       - name: 1. 下载文件
         run: |
           echo "准备从 ${{ github.event.inputs.download_url }} 下载..."
-          # curl -L -o "文件名" "URL"
-          # 这将下载原始文件并按指定名称保存，不会压缩或打包
-          curl -L -o "${{ github.event.inputs.file_name }}" "${{ github.event.inputs.download_url }}"
+          
+          # 使用 curl -o 选项，将文件保存为 env 中定义的 AUTO_FILE_NAME
+          curl -L -o "${{ env.AUTO_FILE_NAME }}" "${{ github.event.inputs.download_url }}"
           
           echo "文件下载完成!"
-          echo "文件名: ${{ github.event.inputs.file_name }}"
-          echo "文件大小: $(ls -lh ${{ github.event.inputs.file_name }} | awk '{print $5}')"
+          echo "自动文件名: ${{ env.AUTO_FILE_NAME }}"
+          echo "文件大小: $(ls -lh ${{ env.AUTO_FILE_NAME }} | awk '{print $5}')"
 
-      # 步骤 2: 发送邮件（带原始文件附件）
+      # 步骤 2: 发送邮件（带附件）
       - name: 2. 发送邮件
         uses: dawidd6/action-send-mail@v3
         with:
@@ -45,7 +45,7 @@ jobs:
           password: ${{ secrets.SMTP_PASSWORD }} 
 
           # 邮件内容配置
-          subject: '✅ GitHub Actions 下载任务完成: ${{ github.event.inputs.file_name }}'
+          subject: '✅ GitHub Actions 下载任务完成: ${{ env.AUTO_FILE_NAME }}'
           to: ${{ github.event.inputs.recipient_email }}
           from: GitHub Actions <${{ secrets.SMTP_USERNAME }}> 
           
@@ -53,18 +53,18 @@ jobs:
             您在 GitHub Actions 触发的下载任务已完成。
             
             目标邮箱: ${{ github.event.inputs.recipient_email }}
-            文件名:   ${{ github.event.inputs.file_name }}
+            附件文件名: ${{ env.AUTO_FILE_NAME }}
             下载源:   ${{ github.event.inputs.download_url }}
             
-            请查收附件（原始文件）。
+            请查收附件。
           
-          # 附件: 直接引用下载的原始文件
-          attachments: ./${{ github.event.inputs.file_name }}
+          # 附件: 使用自动生成的文件名
+          attachments: ./${{ env.AUTO_FILE_NAME }}
           
       # 步骤 3: 清理下载的文件
       - name: 3. 清理工作区文件
-        if: always() # 无论上一步是否成功，都执行清理
+        if: always() 
         run: |
           echo "清理下载的文件..."
-          rm -f "${{ github.event.inputs.file_name }}"
+          rm -f "${{ env.AUTO_FILE_NAME }}"
           echo "清理完成。"
